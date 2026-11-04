@@ -9,13 +9,4 @@ if [ "$(id -u)" -eq 0 ]; then
     exec gosu geekez "$0" "$@"
 fi
 
-if ! node - <<'NODE'
-const { getChromiumPath } = require('/app/src/main/chromium-path');
-if (!getChromiumPath({ isDev: true, appPath: '/app' })) process.exit(1);
-NODE
-then
-    echo "Chrome is missing; downloading the latest stable Chrome to the mounted data directory."
-    ./node_modules/.bin/browsers install chrome@stable --path /app/resources/puppeteer
-fi
-
 exec node /app/docker-web-manager.js

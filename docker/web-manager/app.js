@@ -46,6 +46,11 @@ const translations = {
         'All profiles': '所有配置文件',
         'Profile': '配置文件',
         'Chrome version': 'Chrome 版本',
+        'Latest (Stable)': '最新（Stable）',
+        'installed': '已安装',
+        'Latest follows the Stable channel. A version that is not installed yet is downloaded the first time a profile starts with it.': '“最新”跟随 Stable 通道。尚未安装的版本会在配置文件首次启动时下载。',
+        'Downloading Chrome {version}…': '正在下载 Chrome {version}…',
+        'Chrome version must be "latest", a major version such as 130, or a full version such as 130.0.6723.58.': 'Chrome 版本须为 latest、主版本号（如 130）或完整版本号（如 130.0.6723.58）。',
         'Actions': '操作',
         'More actions': '更多操作',
         'Select a profile': '选择配置文件',
@@ -135,6 +140,10 @@ function translate(message) {
     const runningLimit = message.match(/^At most (\d+) profiles can run at once\.$/);
     if (language === 'zh-CN' && runningLimit) {
         return translations[language]['At most {count} profiles can run at once.'].replace('{count}', runningLimit[1]);
+    }
+    const downloading = message.match(/^Downloading Chrome (.+)…$/);
+    if (language === 'zh-CN' && downloading) {
+        return translations[language]['Downloading Chrome {version}…'].replace('{version}', downloading[1]);
     }
     return message;
 }
@@ -283,6 +292,12 @@ function renderOverview() {
         status.className = `state-badge ${profile.state}`;
         status.textContent = translate(profile.state);
         statusCell.append(status);
+        if (profile.message) {
+            const note = document.createElement('span');
+            note.className = 'state-note';
+            note.textContent = translate(profile.message);
+            statusCell.append(note);
+        }
 
         const proxyCell = document.createElement('td');
         proxyCell.textContent = profile.proxy === 'direct://' ? translate('Direct connection') : profile.proxy;
@@ -372,6 +387,9 @@ function renderWorkspace(profile) {
     document.querySelector('#detail-avatar').textContent = profile.name.trim().charAt(0).toUpperCase();
     document.querySelector('#detail-name').textContent = profile.name;
     document.querySelector('#detail-status').textContent = translate(profile.state);
+    document.querySelector('#detail-chrome').textContent = profile.chromeVersion === profile.chrome || !profile.chromeVersion
+        ? (profile.chrome || 'latest')
+        : `${profile.chrome} (${profile.chromeVersion})`;
     document.querySelector('#detail-proxy').textContent = profile.proxy === 'direct://' ? translate('Direct connection') : profile.proxy;
     document.querySelector('#detail-notes').textContent = profile.notes || translate('No notes added.');
     document.querySelector('#detail-created').textContent = formatCreatedAt(profile.createdAt);
@@ -414,6 +432,31 @@ function selectProfile(profile) {
     renderProfiles();
 }
 
+async function fillChromeOptions(selected) {
+    const select = document.querySelector('#profile-chrome');
+    const ensureOption = (value) => {
+        if (value && ![...select.options].some((option) => option.value === value)) {
+            select.append(new Option(`Chrome ${value}`, value));
+        }
+    };
+    select.replaceChildren(new Option(translate('Latest (Stable)'), 'latest'));
+    ensureOption(selected);
+    select.value = selected || 'latest';
+    try {
+        const { versions } = await api('/api/chrome-versions');
+        const current = select.value;
+        select.replaceChildren(new Option(translate('Latest (Stable)'), 'latest'));
+        for (const item of versions) {
+            const label = `Chrome ${item.version}${item.installed ? ` (${translate('installed')})` : ''}`;
+            select.append(new Option(label, item.version));
+        }
+        ensureOption(current);
+        select.value = current;
+    } catch (error) {
+        showToast(error.message, true);
+    }
+}
+
 function openDialog(profile = null) {
     editingId = profile?.id || null;
     formError.hidden = true;
@@ -421,6 +464,7 @@ function openDialog(profile = null) {
     document.querySelector('#dialog-title').textContent = translate(editingId ? 'Edit profile' : 'Create profile');
     document.querySelector('#dialog-save').textContent = translate(editingId ? 'Save changes' : 'Create profile');
     document.querySelector('#profile-name').value = profile?.name || '';
+    fillChromeOptions(profile?.chrome || 'latest');
     document.querySelector('#profile-proxy').value = profile?.proxy || 'direct://';
     document.querySelector('#profile-notes').value = profile?.notes || '';
     profileDialog.showModal();
@@ -541,6 +585,7 @@ profileForm.addEventListener('submit', async (event) => {
     formError.hidden = true;
     const body = {
         name: document.querySelector('#profile-name').value,
+        chrome: document.querySelector('#profile-chrome').value,
         proxy: document.querySelector('#profile-proxy').value,
         notes: document.querySelector('#profile-notes').value
     };

@@ -98,6 +98,7 @@
               </div>
               <div class="detail-grid">
                 <div class="detail-item"><span data-i18n="Status">Status</span><strong id="detail-status"></strong></div>
+                <div class="detail-item"><span data-i18n="Chrome version">Chrome version</span><strong id="detail-chrome"></strong></div>
                 <div class="detail-item"><span data-i18n="Proxy">Proxy</span><strong id="detail-proxy"></strong></div>
                 <div class="detail-item"><span data-i18n="Created">Created</span><strong id="detail-created"></strong></div>
                 <div class="detail-item detail-notes"><span data-i18n="Notes">Notes</span><strong id="detail-notes"></strong></div>
@@ -130,6 +131,8 @@
     <form id="profile-form">
       <div class="dialog-heading"><div><div class="eyebrow" data-i18n="BROWSER PROFILE">BROWSER PROFILE</div><h2 id="dialog-title">Create profile</h2></div><button id="dialog-close" class="icon-button" type="button" aria-label="Close" data-i18n-aria-label="Close">×</button></div>
       <label><span data-i18n="Profile name">Profile name</span><input id="profile-name" name="name" required maxlength="64" placeholder="e.g. Work account" data-i18n-placeholder="e.g. Work account"></label>
+      <label><span data-i18n="Chrome version">Chrome version</span><select id="profile-chrome" name="chrome"><option value="latest" data-i18n="Latest (Stable)">Latest (Stable)</option></select></label>
+      <p class="field-help" data-i18n="Latest follows the Stable channel. A version that is not installed yet is downloaded the first time a profile starts with it.">Latest follows the Stable channel. A version that is not installed yet is downloaded the first time a profile starts with it.</p>
       <label><span data-i18n="Proxy address">Proxy address</span> <span class="optional" data-i18n="OPTIONAL">OPTIONAL</span><input id="profile-proxy" name="proxy" placeholder="direct:// or socks5://127.0.0.1:1080"></label>
       <p class="field-help" data-i18n="Proxy credentials are not stored. Changes apply the next time the profile starts.">Proxy credentials are not stored. Changes apply the next time the profile starts.</p>
       <label><span data-i18n="Notes">Notes</span> <span class="optional" data-i18n="OPTIONAL">OPTIONAL</span><textarea id="profile-notes" name="notes" rows="3" maxlength="500" placeholder="Add a note about this profile" data-i18n-placeholder="Add a note about this profile"></textarea></label>

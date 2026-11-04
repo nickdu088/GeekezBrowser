@@ -6,7 +6,6 @@ const { execFile, spawn } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const { promisify } = require('node:util');
 const puppeteer = require('puppeteer');
-const { getChromiumPath } = require('./src/main/chromium-path');
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.join(__dirname, 'docker', 'web-manager');
@@ -20,10 +19,20 @@ const WIDTH = Number(process.env.BROWSER_WIDTH || 1440);
 const HEIGHT = Number(process.env.BROWSER_HEIGHT || 900);
 const MAX_RUNNING = Number(process.env.MAX_RUNNING_PROFILES || 4);
 const PROFILE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CHROME_CACHE = '/app/resources/puppeteer';
+const CHROME_SPEC = /^(latest|\d+(\.\d+){0,3})$/;
 const profiles = new Map();
+const resolvedBuilds = new Map();
+const CHROME_PLATFORMS = {
+    linux: 'linux64', linux_arm: 'linux-arm64', mac: 'mac-x64', mac_arm: 'mac-arm64', win32: 'win32', win64: 'win64'
+};
+const CHROME_VERSION_LIST_URL = 'https://googlechromelabs.github.io/chrome-for-testing/latest-versions-per-milestone-with-downloads.json';
+const CHROME_VERSION_LIST_TTL = 60 * 60 * 1000;
+const CHROME_VERSION_LIST_LIMIT = 40;
+let chromeVersionList = { at: 0, versions: [] };
+const chromeInstalls = new Map();
 const sessions = new Map();
 const displays = new Set();
-let chromeVersion = 'Unknown';
 
 function badRequest(message, status = 400) {
     const error = new Error(message);
@@ -87,6 +96,15 @@ function normalizeProxy(value) {
     return `${proxy.protocol}//${proxy.host}`;
 }
 
+function normalizeChrome(value) {
+    const input = String(value ?? '').trim().toLowerCase();
+    if (!input) return 'latest';
+    if (!CHROME_SPEC.test(input)) {
+        throw badRequest('Chrome version must be "latest", a major version such as 130, or a full version such as 130.0.6723.58.');
+    }
+    return input;
+}
+
 function normalizeProfile(body, existing = {}) {
     const name = String(body.name ?? existing.name ?? '').trim();
     const notes = String(body.notes ?? existing.notes ?? '').trim();
@@ -98,7 +116,8 @@ function normalizeProfile(body, existing = {}) {
         ...existing,
         name,
         notes,
-        proxy: normalizeProxy(body.proxy ?? existing.proxy ?? 'direct://')
+        proxy: normalizeProxy(body.proxy ?? existing.proxy ?? 'direct://'),
+        chrome: normalizeChrome(body.chrome ?? existing.chrome ?? 'latest')
     };
 }
 
@@ -115,20 +134,119 @@ function publicProfile(profile) {
     const session = sessions.get(profile.id);
     return {
         ...profile,
-        chromeVersion,
+        chrome: profile.chrome || 'latest',
+        chromeVersion: session?.buildId || resolvedBuilds.get(specToTag(profile.chrome || 'latest')) || profile.chrome || 'latest',
+        message: session?.message || '',
         state: session?.state || 'stopped',
         url: session?.page?.url() || '',
         title: session?.title || ''
     };
 }
 
-async function getChromeVersion() {
-    const executablePath = getChromiumPath({ isDev: true, appPath: __dirname });
-    if (!executablePath) throw new Error('Chrome is not installed. Check the mounted browser resources.');
-    const { stdout } = await execFileAsync(executablePath, ['--version'], { timeout: 5000 });
-    const match = stdout.match(/\b(\d+\.\d+\.\d+\.\d+)\b/);
-    if (!match) throw new Error(`Could not determine Chrome version from: ${stdout.trim()}`);
-    return match[1];
+let browsersModule;
+function loadBrowsers() {
+    browsersModule ||= import('@puppeteer/browsers');
+    return browsersModule;
+}
+
+function specToTag(spec) {
+    return spec === 'latest' ? 'stable' : spec;
+}
+
+function compareVersions(a, b) {
+    const left = a.split('.').map(Number);
+    const right = b.split('.').map(Number);
+    for (let index = 0; index < 4; index += 1) {
+        const difference = (left[index] || 0) - (right[index] || 0);
+        if (difference) return difference;
+    }
+    return 0;
+}
+
+async function fileExists(filePath) {
+    try {
+        await fs.access(filePath);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function resolveChromeBuild(spec) {
+    const { Browser, detectBrowserPlatform, getInstalledBrowsers, resolveBuildId } = await loadBrowsers();
+    const platform = detectBrowserPlatform();
+    if (!platform) throw new Error('This platform is not supported for Chrome downloads.');
+    const tag = specToTag(spec);
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(tag)) return { platform, buildId: tag };
+    try {
+        return { platform, buildId: await resolveBuildId(Browser.CHROME, platform, tag) };
+    } catch (error) {
+        // Offline or the version service is down: fall back to a matching build that is already installed.
+        const installed = (await getInstalledBrowsers({ cacheDir: CHROME_CACHE }))
+            .filter((item) => item.browser === Browser.CHROME && item.platform === platform
+                && (tag === 'stable' || item.buildId === tag || item.buildId.startsWith(`${tag}.`)))
+            .map((item) => item.buildId)
+            .sort(compareVersions);
+        if (installed.length) return { platform, buildId: installed[installed.length - 1] };
+        throw new Error(`Could not resolve Chrome "${spec}": ${error.message}`);
+    }
+}
+
+async function listChromeVersions() {
+    const { Browser, detectBrowserPlatform, getInstalledBrowsers } = await loadBrowsers();
+    const platform = detectBrowserPlatform();
+    const installed = new Set((await getInstalledBrowsers({ cacheDir: CHROME_CACHE }))
+        .filter((item) => item.browser === Browser.CHROME && item.platform === platform)
+        .map((item) => item.buildId));
+
+    if (Date.now() - chromeVersionList.at >= CHROME_VERSION_LIST_TTL) {
+        try {
+            const response = await fetch(CHROME_VERSION_LIST_URL, { signal: AbortSignal.timeout(5000) });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const milestones = Object.values((await response.json()).milestones || {});
+            const platformName = CHROME_PLATFORMS[platform];
+            const matching = milestones.filter((item) => item.downloads?.chrome?.some((file) => file.platform === platformName));
+            // If the platform name is not in the list at all, show everything and let the download report errors.
+            chromeVersionList = {
+                at: Date.now(),
+                versions: (matching.length ? matching : milestones).map((item) => item.version)
+            };
+        } catch (error) {
+            console.warn('Could not load the Chrome version list:', error.message);
+            chromeVersionList = { ...chromeVersionList, at: Date.now() - CHROME_VERSION_LIST_TTL + 60 * 1000 };
+        }
+    }
+    const remote = [...chromeVersionList.versions].sort(compareVersions).reverse().slice(0, CHROME_VERSION_LIST_LIMIT);
+    return [...new Set([...remote, ...installed])]
+        .sort(compareVersions).reverse()
+        .map((version) => ({ version, installed: installed.has(version) }));
+}
+
+async function ensureChrome(spec, session) {
+    const { Browser, computeExecutablePath, install } = await loadBrowsers();
+    const { platform, buildId } = await resolveChromeBuild(spec);
+    resolvedBuilds.set(specToTag(spec), buildId);
+    session.buildId = buildId;
+    const executablePath = computeExecutablePath({ browser: Browser.CHROME, buildId, cacheDir: CHROME_CACHE });
+
+    let pending = chromeInstalls.get(buildId);
+    if (!pending && !(await fileExists(executablePath))) {
+        pending = (async () => {
+            // Remove leftovers of an interrupted download so the installer starts clean.
+            await fs.rm(path.join(CHROME_CACHE, 'chrome', `${platform}-${buildId}`), { recursive: true, force: true });
+            await install({ browser: Browser.CHROME, buildId, cacheDir: CHROME_CACHE });
+        })().finally(() => chromeInstalls.delete(buildId));
+        chromeInstalls.set(buildId, pending);
+    }
+    if (pending) {
+        session.message = `Downloading Chrome ${buildId}…`;
+        await pending;
+        session.message = '';
+    }
+    if (!(await fileExists(executablePath))) {
+        throw new Error(`Chrome ${buildId} is not available after installation.`);
+    }
+    return executablePath;
 }
 
 async function readJson(request) {
@@ -429,12 +547,10 @@ async function startProfile(id) {
         error.status = 409;
         throw error;
     }
-    const executablePath = getChromiumPath({ isDev: true, appPath: __dirname });
-    if (!executablePath) throw new Error('Chrome is not installed. Check the mounted browser resources.');
-
-    const session = { state: 'starting', browser: null, page: null, title: '' };
+    const session = { state: 'starting', browser: null, page: null, title: '', buildId: '', message: '' };
     sessions.set(id, session);
     try {
+        const executablePath = await ensureChrome(profile.chrome || 'latest', session);
         await startDesktop(session);
         const args = [
             '--no-sandbox',
@@ -534,6 +650,10 @@ async function handleApi(request, response, url) {
     const pathname = url.pathname;
     if (pathname === '/api/config' && request.method === 'GET') {
         sendJson(response, 200, { width: WIDTH, height: HEIGHT });
+        return;
+    }
+    if (pathname === '/api/chrome-versions' && request.method === 'GET') {
+        sendJson(response, 200, { versions: await listChromeVersions() });
         return;
     }
     if (pathname === '/api/profiles' && request.method === 'GET') {
@@ -706,7 +826,6 @@ async function shutdown() {
 async function main() {
     assertConfig();
     await loadProfiles();
-    chromeVersion = await getChromeVersion();
     const server = http.createServer((request, response) => {
         handleRequest(request, response).catch((error) => {
             console.error('Unhandled request error:', error);

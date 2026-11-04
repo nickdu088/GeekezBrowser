@@ -53,6 +53,7 @@ h1{font:700 25px Manrope,sans-serif;letter-spacing:-.7px;margin:6px 0}
 .profile-meta{font-size:9px;color:#838692;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .state-badge{font-size:8px;font-weight:700;letter-spacing:.65px;padding:4px 6px;border-radius:5px;white-space:nowrap}
 .state-badge.running{background:#1d382f;color:#64d6a5}.state-badge.starting{background:#3a3324;color:#e1c174}.state-badge.stopped{background:#292a32;color:#999ca8}
+.state-note{display:block;margin-top:5px;font-size:9px;color:#e1c174;white-space:normal}
 .small-button{padding:5px 8px;border:1px solid #363741;border-radius:5px;background:#24252e;color:#bfc1ca;font-size:10px}
 .small-button:hover{border-color:#6a5e98;color:#eee}.small-button.launch{color:#c6b7ff;border-color:#514473;background:#2c2740}.small-button.stop{color:#f18a8a}.small-button:disabled{opacity:.42;cursor:not-allowed}
 .empty-state{min-height:350px;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:35px 20px}
@@ -125,8 +126,8 @@ h1{font:700 25px Manrope,sans-serif;letter-spacing:-.7px;margin:6px 0}
 .dialog-heading h2{font:700 18px Manrope,sans-serif;margin-top:6px}
 .profile-dialog label{display:block;font-size:11px;font-weight:600;margin:15px 0;color:#d4d5dc}
 .optional{font-size:8px;color:#777a86;letter-spacing:.5px;margin-left:5px}
-.profile-dialog input,.profile-dialog textarea{display:block;width:100%;margin-top:7px;padding:10px;border:1px solid #353741;border-radius:6px;background:#121319;color:#e8eaf0;font-size:12px;outline:0;resize:vertical}
-.profile-dialog input:focus,.profile-dialog textarea:focus{border-color:#8065ed}
+.profile-dialog input,.profile-dialog select,.profile-dialog textarea{display:block;width:100%;margin-top:7px;padding:10px;border:1px solid #353741;border-radius:6px;background:#121319;color:#e8eaf0;font-size:12px;outline:0;resize:vertical}
+.profile-dialog input:focus,.profile-dialog select:focus,.profile-dialog textarea:focus{border-color:#8065ed}
 .field-help{font-size:10px;color:#818490;line-height:1.5;margin-top:-8px}
 .dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:21px}
 .form-error{font-size:11px;color:#ff9999;padding:9px;border-radius:5px;background:#49282b;margin-top:13px}
