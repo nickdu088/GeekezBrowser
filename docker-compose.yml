@@ -1,0 +1,21 @@
+services:
+  geekez-web-manager:
+    build:
+      context: .
+    image: geekez-web-manager:local
+    container_name: geekez-web-manager
+    restart: unless-stopped
+    init: true
+    shm_size: 2gb
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${PORT:-8080}:6080"
+    environment:
+      BROWSER_WIDTH: "${BROWSER_WIDTH:-1440}"
+      BROWSER_HEIGHT: "${BROWSER_HEIGHT:-900}"
+      MAX_RUNNING_PROFILES: "${MAX_RUNNING_PROFILES:-4}"
+      ALLOWED_HOSTS: "${ALLOWED_HOSTS:-}"
+    volumes:
+      - "${DATA_DIR:-./data}/web-manager:/data/manager"
+      - "${DATA_DIR:-./data}/resources/puppeteer:/app/resources/puppeteer"

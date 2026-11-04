@@ -3,6 +3,7 @@ dist/
 release/
 userData/
 BrowserProfiles/
+data/
 _Trash_Bin/
 .env
 .DS_Store

@@ -96,6 +96,25 @@
     npm run dev
     ```
 
+### 方法 3: Docker 网页 Profile 管理器
+
+网页管理器提供独立的普通 Chrome Profile、启动/停止、代理设置和浏览器操作。未打开浏览器时，主面板以表格总览所有 Profile 的 Chrome 版本、状态、代理、备注和创建时间；每行直接显示启动、停止、编辑和删除按钮，不使用弹出子菜单或表格内滚动条；选择行可查看详情或切换至该 Profile 的浏览器。界面支持中文和 English，可在顶部切换，并在当前浏览器中记住选择。每个运行中的 Profile 都有独立的 TigerVNC 虚拟桌面和 WebSocket 会话；noVNC 会随右侧 pane 或全屏尺寸调整桌面分辨率，使 Chrome 按实际 pane 比例铺满显示且保持画面和鼠标坐标准确。多个 Profile 可以同时运行；“Stop”只停止当前 Profile，并释放其桌面和 VNC 进程。数据与桌面版现有 Profile 分开保存，不会更改桌面版数据，也不注入指纹脚本。首次启动时会将最新 Stable 版 Chrome 下载到映射的数据目录。
+
+1. 在项目目录准备配置并构建启动：
+   ```bash
+   cp .env.example .env
+   docker compose up -d --build --force-recreate
+   ```
+2. 如果已有 `.env`，确认 `BIND_ADDRESS=0.0.0.0`。更新程序后使用上面的命令重新构建并替换容器；局域网 IPv4 地址可直接访问，无需额外配置。如使用自定义主机名，请将其填入 `.env` 的 `ALLOWED_HOSTS`，多个主机名用逗号分隔。
+3. 在同一局域网的设备上打开 `http://<服务器局域网IP>:8080`（如端口有修改，请使用 `.env` 中的 `PORT`）。网页管理器没有密码，仅在可信局域网内使用；请勿将端口转发到公网。每个 Profile 的 VNC 和 WebSocket 服务仍只绑定容器内回环地址，并仅通过管理器转发。
+
+Profile 元数据和各自的 Chrome 用户数据保存在 `./data/web-manager`，Chrome 下载内容保存在 `./data/resources/puppeteer`。默认最多同时运行 4 个 Profile，可在 `.env` 中通过 `MAX_RUNNING_PROFILES` 调整（1–32）；还可修改端口和浏览器画面尺寸。查看日志或停止服务：
+
+```bash
+docker compose logs -f
+docker compose down
+```
+
 ## 🛠 平台适用性指南
 
 | 平台 | 安全评级 | 备注建议 |

@@ -1,0 +1,3 @@
+html,body,#screen{width:100%;height:100%;margin:0;overflow:hidden;background:#101116}
+#screen{position:relative}
+#screen canvas{display:block;width:100%;height:100%;outline:0}

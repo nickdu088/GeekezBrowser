@@ -1,0 +1,11 @@
+.git
+.env
+node_modules
+out
+dist
+release
+data
+resources/bin
+resources/puppeteer
+*.log
+.DS_Store

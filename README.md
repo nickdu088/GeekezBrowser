@@ -96,6 +96,10 @@ Go to the [**Releases**](https://github.com/EchoHS/GeekezBrowser/releases) page 
     npm run dev
     ```
 
+### Docker Web Profile Manager
+
+Copy `.env.example` to `.env` (or update an existing `.env` so `BIND_ADDRESS=0.0.0.0`), then run `docker compose up -d --build --force-recreate` to rebuild and replace the container. From another device on that LAN, open `http://<server-lan-ip>:8080`; private LAN IPv4 addresses work without additional configuration. If you use a custom hostname, add it to `ALLOWED_HOSTS` in `.env`. The manager has no password; use it only on a trusted local network and do not expose its port to the internet.
+
 ## 🛠 Platform Compatibility Guide
 
 | Platform | Safety Rating | Notes |

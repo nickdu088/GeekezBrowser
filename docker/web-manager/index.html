@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="data:,">
+  <title>GeekEZ Browser Manager</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="GeekEZ Browser Manager home" data-i18n-aria-label="GeekEZ Browser Manager home">
+        <span class="brand-mark">G</span>
+        <span><strong>GeekEZ</strong><small>WEB MANAGER</small></span>
+      </a>
+      <div class="sidebar-label" data-i18n="WORKSPACE">WORKSPACE</div>
+      <button class="nav-item active" type="button"><span class="nav-icon">▦</span> <span data-i18n="Profiles">Profiles</span> <span id="profile-count" class="nav-count">0</span></button>
+      <section class="sidebar-profiles">
+        <div class="sidebar-profiles-heading">
+          <span data-i18n="PROFILES">PROFILES</span>
+          <div class="sidebar-profile-actions">
+            <button id="new-profile-sidebar" class="icon-button" type="button" aria-label="New profile" title="New profile" data-i18n-aria-label="New profile" data-i18n-title="New profile">＋</button>
+            <button id="refresh" class="icon-button" type="button" aria-label="Refresh profiles" title="Refresh" data-i18n-aria-label="Refresh profiles" data-i18n-title="Refresh">↻</button>
+          </div>
+        </div>
+        <div id="profile-list" class="profile-list"></div>
+        <div id="empty-state" class="empty-state">
+          <div class="empty-icon">▣</div>
+          <strong data-i18n="No profiles yet">No profiles yet</strong>
+          <p data-i18n="Create a profile to start a separate browser session.">Create a profile to start a separate browser session.</p>
+          <button class="button secondary" type="button" data-action="new" data-i18n="Create profile">Create profile</button>
+        </div>
+      </section>
+      <div class="sidebar-bottom">
+        <div class="connection"><span class="live-dot"></span><span data-i18n="Network connection">Network connection</span></div>
+        <p data-i18n="Available on your local network. No password is configured; do not expose this service to the internet.">Available on your local network. No password is configured; do not expose this service to the internet.</p>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="breadcrumbs"><span data-i18n="Workspace">Workspace</span> <span>/</span> <strong data-i18n="Profiles">Profiles</strong></div>
+        <div class="topbar-actions">
+          <button id="language-toggle" class="button secondary language-button" type="button" aria-label="Switch language">中文</button>
+          <button id="new-profile" class="button primary" type="button"><span>＋</span> <span data-i18n="New profile">New profile</span></button>
+        </div>
+      </header>
+
+      <section class="page-heading">
+        <div>
+          <div class="eyebrow" data-i18n="BROWSER WORKSPACE">BROWSER WORKSPACE</div>
+          <h1 data-i18n="Profiles">Profiles</h1>
+          <p data-i18n="Manage isolated browser sessions from one place.">Manage isolated browser sessions from one place.</p>
+        </div>
+        <div class="summary-card"><span class="summary-icon">◉</span><span><strong id="running-count">0</strong><small data-i18n="RUNNING">RUNNING</small></span></div>
+      </section>
+
+      <section class="workspace-grid">
+        <section class="profile-panel">
+          <div class="browser-heading">
+            <div><h2 id="panel-title" data-i18n="Profile overview">Profile overview</h2><p id="panel-subtitle" data-i18n="All browser profiles at a glance.">All browser profiles at a glance.</p></div>
+            <div class="panel-actions">
+              <button id="overview-back" class="button secondary" type="button" hidden data-i18n="All profiles">All profiles</button>
+              <span id="panel-state" class="state-badge stopped" hidden>STOPPED</span>
+              <button id="panel-primary" class="button primary" type="button" data-action="start" hidden>Start</button>
+            </div>
+          </div>
+          <section id="profile-details" class="profile-details">
+            <div id="profile-overview" class="profile-overview">
+              <div class="overview-table-scroll">
+                <table class="overview-table">
+                  <thead>
+                    <tr>
+                      <th scope="col" data-i18n="Profile">Profile</th>
+                      <th scope="col" data-i18n="Chrome version">Chrome version</th>
+                      <th scope="col" data-i18n="Status">Status</th>
+                      <th scope="col" data-i18n="Proxy">Proxy</th>
+                      <th scope="col" data-i18n="Notes">Notes</th>
+                      <th scope="col" data-i18n="Created">Created</th>
+                      <th scope="col" data-i18n="Actions">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="overview-list"></tbody>
+                </table>
+              </div>
+              <div id="overview-no-profiles" class="overview-empty" hidden>
+                <strong data-i18n="No profiles yet">No profiles yet</strong>
+                <span data-i18n="Create a profile to start a separate browser session.">Create a profile to start a separate browser session.</span>
+              </div>
+            </div>
+            <div id="details-content" hidden>
+              <div class="detail-identity">
+                <div id="detail-avatar" class="profile-avatar detail-avatar"></div>
+                <div><div class="eyebrow" data-i18n="BROWSER PROFILE">BROWSER PROFILE</div><h3 id="detail-name"></h3></div>
+              </div>
+              <div class="detail-grid">
+                <div class="detail-item"><span data-i18n="Status">Status</span><strong id="detail-status"></strong></div>
+                <div class="detail-item"><span data-i18n="Proxy">Proxy</span><strong id="detail-proxy"></strong></div>
+                <div class="detail-item"><span data-i18n="Created">Created</span><strong id="detail-created"></strong></div>
+                <div class="detail-item detail-notes"><span data-i18n="Notes">Notes</span><strong id="detail-notes"></strong></div>
+              </div>
+              <div class="detail-actions">
+                <button id="detail-stop" class="button secondary" type="button" hidden data-i18n="Stop browser">Stop browser</button>
+                <button id="edit-profile" class="button secondary" type="button" data-i18n="Edit profile">Edit profile</button>
+                <button id="delete-profile" class="button danger" type="button" data-i18n="Delete profile">Delete profile</button>
+              </div>
+            </div>
+          </section>
+          <section id="browser-view" hidden>
+            <div id="viewport" class="viewport" aria-label="Native Chrome browser" data-i18n-aria-label="Native Chrome browser">
+              <iframe id="desktop-frame" class="desktop-frame" title="Native Chrome desktop" data-i18n-title="Native Chrome desktop" allow="clipboard-read; clipboard-write; fullscreen" hidden></iframe>
+              <div id="preview-empty" class="preview-empty">
+                <div class="preview-symbol">G</div>
+                <strong data-i18n="Connecting to Chrome">Connecting to Chrome</strong>
+                <span data-i18n="The native Chrome window will appear here.">The native Chrome window will appear here.</span>
+              </div>
+              <div id="loading" class="loading" hidden><span class="spinner"></span> <span data-i18n="Connecting to Chrome…">Connecting to Chrome…</span></div>
+              <button id="fullscreen-browser" class="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" data-i18n-aria-label="Enter fullscreen" data-i18n-title="Enter fullscreen">⛶</button>
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="profile-dialog" class="profile-dialog">
+    <form id="profile-form">
+      <div class="dialog-heading"><div><div class="eyebrow" data-i18n="BROWSER PROFILE">BROWSER PROFILE</div><h2 id="dialog-title">Create profile</h2></div><button id="dialog-close" class="icon-button" type="button" aria-label="Close" data-i18n-aria-label="Close">×</button></div>
+      <label><span data-i18n="Profile name">Profile name</span><input id="profile-name" name="name" required maxlength="64" placeholder="e.g. Work account" data-i18n-placeholder="e.g. Work account"></label>
+      <label><span data-i18n="Proxy address">Proxy address</span> <span class="optional" data-i18n="OPTIONAL">OPTIONAL</span><input id="profile-proxy" name="proxy" placeholder="direct:// or socks5://127.0.0.1:1080"></label>
+      <p class="field-help" data-i18n="Proxy credentials are not stored. Changes apply the next time the profile starts.">Proxy credentials are not stored. Changes apply the next time the profile starts.</p>
+      <label><span data-i18n="Notes">Notes</span> <span class="optional" data-i18n="OPTIONAL">OPTIONAL</span><textarea id="profile-notes" name="notes" rows="3" maxlength="500" placeholder="Add a note about this profile" data-i18n-placeholder="Add a note about this profile"></textarea></label>
+      <div id="form-error" class="form-error" role="alert" hidden></div>
+      <div class="dialog-actions"><button id="dialog-cancel" class="button secondary" type="button" data-i18n="Cancel">Cancel</button><button id="dialog-save" class="button primary" type="submit">Create profile</button></div>
+    </form>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
