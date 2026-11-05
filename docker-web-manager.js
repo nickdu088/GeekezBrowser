@@ -3,9 +3,13 @@ const http = require('node:http');
 const net = require('node:net');
 const path = require('node:path');
 const { execFile, spawn } = require('node:child_process');
+const os = require('node:os');
 const { randomUUID } = require('node:crypto');
 const { promisify } = require('node:util');
 const puppeteer = require('puppeteer');
+const presets = require('./docker/web-manager/presets');
+const { parseProxy, buildXrayConfig } = require('./docker/web-manager/proxy');
+const { buildEnvironment, installEnvironment } = require('./docker/web-manager/environment');
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.join(__dirname, 'docker', 'web-manager');
@@ -20,6 +24,7 @@ const HEIGHT = Number(process.env.BROWSER_HEIGHT || 900);
 const MAX_RUNNING = Number(process.env.MAX_RUNNING_PROFILES || 4);
 const PROFILE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CHROME_CACHE = '/app/resources/puppeteer';
+const XRAY_PATH = process.env.XRAY_PATH || '/usr/local/bin/xray';
 const CHROME_SPEC = /^(latest|\d+(\.\d+){0,3})$/;
 const profiles = new Map();
 const resolvedBuilds = new Map();
@@ -79,21 +84,61 @@ function saveProfiles() {
     return write;
 }
 
-function normalizeProxy(value) {
-    const input = String(value ?? '').trim();
-    if (!input || input.toLowerCase() === 'direct://' || input.toLowerCase() === 'direct') return 'direct://';
-    let proxy;
+function maskProxy(value) {
+    if (!value) return '';
     try {
-        proxy = new URL(input.includes('://') ? input : `http://${input}`);
+        return parseProxy(value).display;
     } catch {
-        throw badRequest('Proxy must be direct:// or a valid HTTP(S)/SOCKS proxy URL.');
+        return '';
     }
-    if (!['http:', 'https:', 'socks4:', 'socks5:'].includes(proxy.protocol)
-        || !proxy.hostname || proxy.username || proxy.password
-        || proxy.pathname !== '/' || proxy.search || proxy.hash) {
-        throw badRequest('Proxy must be a URL without credentials or a path (for example, socks5://127.0.0.1:1080).');
+}
+
+// Credentials and share links are stored but never sent back to the browser. The masked text the
+// form shows for an existing proxy means "keep the stored one".
+function resolveProxy(value, existing, fallback) {
+    if (value === undefined) return existing ?? fallback;
+    const input = String(value).trim();
+    if (!input) return fallback;
+    if (existing && input === maskProxy(existing)) return existing;
+    const parsed = parseProxy(input);
+    return parsed.kind === 'direct' ? fallback : parsed.stored;
+}
+
+function normalizeTags(value) {
+    const list = Array.isArray(value) ? value : String(value ?? '').split(',');
+    const tags = [...new Set(list.map((tag) => String(tag).trim()).filter(Boolean))];
+    if (tags.length > 10 || tags.some((tag) => tag.length > 24 || /[\u0000-\u001f\u007f]/.test(tag))) {
+        throw badRequest('Use at most 10 tags of up to 24 characters each.');
     }
-    return `${proxy.protocol}//${proxy.host}`;
+    return tags;
+}
+
+function choice(value, allowed, message) {
+    if (!allowed.includes(value)) throw badRequest(message);
+    return value;
+}
+
+function normalizeFingerprint(input = {}, existing = {}) {
+    const merged = { cpuCores: 0, memory: 0, userAgent: '', webgl: '', ...existing, ...input };
+    return {
+        cpuCores: choice(Number(merged.cpuCores) || 0, [0, ...presets.CPU_CORES], 'Unsupported CPU core count.'),
+        memory: choice(Number(merged.memory) || 0, [0, ...presets.MEMORY_GB], 'Unsupported device memory.'),
+        userAgent: choice(String(merged.userAgent || ''), ['', ...Object.keys(presets.USER_AGENTS)], 'Unsupported user agent preset.'),
+        webgl: choice(String(merged.webgl || ''), ['', ...Object.keys(presets.WEBGL)], 'Unsupported WebGL preset.')
+    };
+}
+
+function withDefaults(profile) {
+    return {
+        preProxy: '',
+        tags: [],
+        webrtcProtect: false,
+        watermark: false,
+        timezone: '',
+        language: '',
+        ...profile,
+        fingerprint: normalizeFingerprint(profile.fingerprint)
+    };
 }
 
 function normalizeChrome(value) {
@@ -112,12 +157,24 @@ function normalizeProfile(body, existing = {}) {
         throw badRequest('Profile name must be 1-64 characters and contain no control characters.');
     }
     if (notes.length > 500) throw badRequest('Notes must be 500 characters or fewer.');
+    const proxy = resolveProxy(body.proxy, existing.proxy, 'direct://');
+    const preProxy = resolveProxy(body.preProxy, existing.preProxy, '');
+    if (preProxy && proxy === 'direct://') throw badRequest('A pre-proxy needs a profile proxy to chain to.');
     return {
         ...existing,
         name,
         notes,
-        proxy: normalizeProxy(body.proxy ?? existing.proxy ?? 'direct://'),
-        chrome: normalizeChrome(body.chrome ?? existing.chrome ?? 'latest')
+        proxy,
+        preProxy,
+        chrome: normalizeChrome(body.chrome ?? existing.chrome ?? 'latest'),
+        tags: normalizeTags(body.tags ?? existing.tags ?? []),
+        webrtcProtect: Boolean(body.webrtcProtect ?? existing.webrtcProtect ?? false),
+        watermark: Boolean(body.watermark ?? existing.watermark ?? false),
+        timezone: choice(String(body.timezone ?? existing.timezone ?? ''),
+            ['', 'auto', ...presets.CITIES.map((city) => city.id)], 'Unsupported timezone.'),
+        language: choice(String(body.language ?? existing.language ?? ''),
+            ['', 'auto', ...presets.LANGUAGES.map((language) => language.code)], 'Unsupported language.'),
+        fingerprint: normalizeFingerprint(body.fingerprint, existing.fingerprint)
     };
 }
 
@@ -133,7 +190,9 @@ function sendJson(response, status, value) {
 function publicProfile(profile) {
     const session = sessions.get(profile.id);
     return {
-        ...profile,
+        ...withDefaults(profile),
+        proxy: maskProxy(profile.proxy) || 'direct://',
+        preProxy: maskProxy(profile.preProxy),
         chrome: profile.chrome || 'latest',
         chromeVersion: session?.buildId || resolvedBuilds.get(specToTag(profile.chrome || 'latest')) || profile.chrome || 'latest',
         message: session?.message || '',
@@ -426,6 +485,32 @@ async function stopProcess(child) {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
 }
 
+async function startXray(session, main, pre) {
+    try {
+        await fs.access(XRAY_PATH);
+    } catch {
+        throw new Error('Xray is not installed in this image. Rebuild the image to enable share links, proxy credentials and chains.');
+    }
+    const port = await allocatePort();
+    const configPath = path.join(os.tmpdir(), `geekez-xray-${randomUUID()}.json`);
+    await fs.writeFile(configPath, JSON.stringify(buildXrayConfig(main, pre, port)), { mode: 0o600 });
+    let output = '';
+    const child = spawn(XRAY_PATH, ['run', '-c', configPath], { stdio: ['ignore', 'pipe', 'pipe'] });
+    session.xray = child;
+    const collect = (chunk) => { output = (output + chunk).slice(-600); };
+    child.stdout.on('data', collect);
+    child.stderr.on('data', collect);
+    child.on('error', (error) => console.error('Could not start Xray:', error));
+    try {
+        await waitForPort(child, 'Xray', port);
+    } catch (error) {
+        throw new Error(`${error.message} ${output.trim()}`.trim());
+    } finally {
+        await fs.rm(configPath, { force: true });
+    }
+    return port;
+}
+
 async function startDesktop(session) {
     let display = 100;
     while (displays.has(display)) display += 1;
@@ -472,6 +557,9 @@ async function startDesktop(session) {
 }
 
 async function stopDesktop(session) {
+    // Also tears down the profile's Xray proxy, which lives and dies with the virtual desktop.
+    await stopProcess(session.xray);
+    session.xray = null;
     const desktop = session.desktop;
     if (!desktop) return;
     session.desktop = null;
@@ -561,17 +649,31 @@ async function startProfile(id) {
             '--start-maximized',
             `--window-size=${WIDTH},${HEIGHT}`
         ];
-        if (profile.proxy !== 'direct://') args.push(`--proxy-server=${profile.proxy}`);
+        const main = parseProxy(profile.proxy);
+        const pre = profile.preProxy ? parseProxy(profile.preProxy) : null;
+        if (main.kind === 'xray' || (pre && main.kind !== 'direct')) {
+            const xrayPort = await startXray(session, main, pre);
+            args.push(`--proxy-server=socks5://127.0.0.1:${xrayPort}`);
+        } else if (main.kind === 'plain') {
+            args.push(`--proxy-server=${main.display}`);
+        }
+        // Also set at launch so the user agent and timezone are right for new tabs and workers from the first request.
+        const userAgentPreset = presets.USER_AGENTS[withDefaults(profile).fingerprint.userAgent];
+        if (userAgentPreset) args.push(`--user-agent=${userAgentPreset.string(session.buildId.split('.')[0])}`);
+        const city = presets.CITIES.find((item) => item.id === profile.timezone);
+        if (profile.webrtcProtect) args.push('--webrtc-ip-handling-policy=disable_non_proxied_udp', '--force-webrtc-ip-handling-policy');
+        if (/^[a-z]{2,3}-[A-Z]{2}$/.test(profile.language || '')) args.push(`--lang=${profile.language}`, `--accept-lang=${profile.language}`);
         const browser = await puppeteer.launch({
             executablePath,
             headless: false,
             userDataDir: path.join(PROFILE_ROOT, id),
             defaultViewport: null,
-            env: session.desktop.env,
+            env: city ? { ...session.desktop.env, TZ: city.timezone } : session.desktop.env,
             args
         });
         session.browser = browser;
         [session.page] = await browser.pages();
+        await installEnvironment(browser, await buildEnvironment(withDefaults({ ...profile, id }), browser, session.page));
         await session.page.goto('about:blank');
         session.state = 'running';
         await focusSession(session);
@@ -650,6 +752,17 @@ async function handleApi(request, response, url) {
     const pathname = url.pathname;
     if (pathname === '/api/config' && request.method === 'GET') {
         sendJson(response, 200, { width: WIDTH, height: HEIGHT });
+        return;
+    }
+    if (pathname === '/api/presets' && request.method === 'GET') {
+        sendJson(response, 200, {
+            cities: presets.CITIES.map(({ id, label, timezone }) => ({ id, label: `${label} (${timezone})` })),
+            languages: presets.LANGUAGES,
+            webgl: Object.entries(presets.WEBGL).map(([id, item]) => ({ id, label: item.label })),
+            userAgents: Object.entries(presets.USER_AGENTS).map(([id, item]) => ({ id, label: item.label })),
+            cpuCores: presets.CPU_CORES,
+            memory: presets.MEMORY_GB
+        });
         return;
     }
     if (pathname === '/api/chrome-versions' && request.method === 'GET') {

@@ -101,6 +101,8 @@
                 <div class="detail-item"><span data-i18n="Chrome version">Chrome version</span><strong id="detail-chrome"></strong></div>
                 <div class="detail-item"><span data-i18n="Proxy">Proxy</span><strong id="detail-proxy"></strong></div>
                 <div class="detail-item"><span data-i18n="Created">Created</span><strong id="detail-created"></strong></div>
+                <div class="detail-item"><span data-i18n="Tags">Tags</span><strong id="detail-tags"></strong></div>
+                <div class="detail-item detail-notes"><span data-i18n="Environment">Environment</span><strong id="detail-environment"></strong></div>
                 <div class="detail-item detail-notes"><span data-i18n="Notes">Notes</span><strong id="detail-notes"></strong></div>
               </div>
               <div class="detail-actions">
@@ -133,8 +135,29 @@
       <label><span data-i18n="Profile name">Profile name</span><input id="profile-name" name="name" required maxlength="64" placeholder="e.g. Work account" data-i18n-placeholder="e.g. Work account"></label>
       <label><span data-i18n="Chrome version">Chrome version</span><select id="profile-chrome" name="chrome"><option value="latest" data-i18n="Latest (Stable)">Latest (Stable)</option></select></label>
       <p class="field-help" data-i18n="Latest follows the Stable channel. A version that is not installed yet is downloaded the first time a profile starts with it.">Latest follows the Stable channel. A version that is not installed yet is downloaded the first time a profile starts with it.</p>
-      <label><span data-i18n="Proxy address">Proxy address</span> <span class="optional" data-i18n="OPTIONAL">OPTIONAL</span><input id="profile-proxy" name="proxy" placeholder="direct:// or socks5://127.0.0.1:1080"></label>
-      <p class="field-help" data-i18n="Proxy credentials are not stored. Changes apply the next time the profile starts.">Proxy credentials are not stored. Changes apply the next time the profile starts.</p>
+      <label><span data-i18n="Tags">Tags</span> <span class="optional" data-i18n="OPTIONAL">OPTIONAL</span><input id="profile-tags" name="tags" maxlength="260" placeholder="e.g. US, shop" data-i18n-placeholder="e.g. US, shop"></label>
+      <div class="form-section" data-i18n="NETWORK">NETWORK</div>
+      <label><span data-i18n="Proxy address">Proxy address</span> <span class="optional" data-i18n="OPTIONAL">OPTIONAL</span><input id="profile-proxy" name="proxy" autocomplete="off" placeholder="direct://, socks5://…, vless://…, vmess://…, trojan://…, ss://…"></label>
+      <p class="field-help" data-i18n="Supports HTTP/SOCKS proxies, proxies with a username and password, and vmess://, vless://, trojan:// and ss:// links. Credentials are stored on the server and never shown again. Changes apply the next time the profile starts.">Supports HTTP/SOCKS proxies, proxies with a username and password, and vmess://, vless://, trojan:// and ss:// links. Credentials are stored on the server and never shown again. Changes apply the next time the profile starts.</p>
+      <label><span data-i18n="Pre-proxy">Pre-proxy</span> <span class="optional" data-i18n="OPTIONAL">OPTIONAL</span><input id="profile-preproxy" name="preProxy" autocomplete="off" placeholder="socks5://user:pass@host:1080"></label>
+      <p class="field-help" data-i18n="Traffic reaches the proxy above through this one (a proxy chain).">Traffic reaches the proxy above through this one (a proxy chain).</p>
+      <label class="check"><input id="profile-webrtc" name="webrtcProtect" type="checkbox"><span data-i18n="Block WebRTC IP leaks">Block WebRTC IP leaks</span></label>
+      <div class="form-section" data-i18n="LOCATION & LANGUAGE">LOCATION &amp; LANGUAGE</div>
+      <label><span data-i18n="Timezone & location">Timezone &amp; location</span><select id="profile-timezone" name="timezone"><option value="" data-i18n="Default (do not change)">Default (do not change)</option></select></label>
+      <label><span data-i18n="Language">Language</span><select id="profile-language" name="language"><option value="" data-i18n="Default (do not change)">Default (do not change)</option></select></label>
+      <p class="field-help" data-i18n="Auto detects the proxy's exit IP when the profile starts, so the first start can take a few seconds longer.">Auto detects the proxy's exit IP when the profile starts, so the first start can take a few seconds longer.</p>
+      <div class="form-section form-section-row"><span data-i18n="FINGERPRINT">FINGERPRINT</span><button id="randomize-fingerprint" class="button secondary small-button" type="button" data-i18n="Randomize">Randomize</button></div>
+      <div class="field-row">
+        <label><span data-i18n="CPU cores">CPU cores</span><select id="profile-cpu"><option value="0" data-i18n="Default (do not change)">Default (do not change)</option><option>2</option><option>4</option><option>6</option><option>8</option><option>12</option><option>16</option></select></label>
+        <label><span data-i18n="Memory (GB)">Memory (GB)</span><select id="profile-memory"><option value="0" data-i18n="Default (do not change)">Default (do not change)</option><option>2</option><option>4</option><option>8</option></select></label>
+      </div>
+      <div class="field-row">
+        <label><span data-i18n="User agent">User agent</span><select id="profile-ua"><option value="" data-i18n="Default (do not change)">Default (do not change)</option><option value="windows">Windows 10 (Chrome)</option><option value="mac">macOS (Chrome)</option><option value="linux">Linux (Chrome)</option></select></label>
+        <label><span data-i18n="WebGL graphics card">WebGL graphics card</span><select id="profile-webgl"><option value="" data-i18n="Default (do not change)">Default (do not change)</option><option value="nvidia">NVIDIA GeForce RTX 3060</option><option value="intel">Intel UHD Graphics 630</option><option value="amd">AMD Radeon RX 6600</option><option value="apple">Apple M1</option></select></label>
+      </div>
+      <p class="field-help" data-i18n="Only the options you choose are changed. Pick values that match each other (for example a Windows user agent with an NVIDIA or Intel card).">Only the options you choose are changed. Pick values that match each other (for example a Windows user agent with an NVIDIA or Intel card).</p>
+      <label class="check"><input id="profile-watermark" name="watermark" type="checkbox"><span data-i18n="Show profile name watermark on pages">Show profile name watermark on pages</span></label>
+      <div class="form-section" data-i18n="NOTES">NOTES</div>
       <label><span data-i18n="Notes">Notes</span> <span class="optional" data-i18n="OPTIONAL">OPTIONAL</span><textarea id="profile-notes" name="notes" rows="3" maxlength="500" placeholder="Add a note about this profile" data-i18n-placeholder="Add a note about this profile"></textarea></label>
       <div id="form-error" class="form-error" role="alert" hidden></div>
       <div class="dialog-actions"><button id="dialog-cancel" class="button secondary" type="button" data-i18n="Cancel">Cancel</button><button id="dialog-save" class="button primary" type="submit">Create profile</button></div>

@@ -119,7 +119,7 @@ h1{font:700 25px Manrope,sans-serif;letter-spacing:-.7px;margin:6px 0}
 .spinner{width:15px;height:15px;border:2px solid #ffffff36;border-top-color:#a48dff;border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .browser-footer{display:flex;justify-content:space-between;color:#777a86;font-size:9px;margin-top:10px}.browser-footer .live-dot{height:6px;width:6px;margin-right:5px}
-.profile-dialog{width:min(440px,calc(100vw - 30px));border:1px solid #353641;border-radius:11px;background:#191a21;color:#e8eaf0;padding:0;box-shadow:0 24px 80px #0009}
+.profile-dialog{width:min(560px,calc(100vw - 30px));max-height:calc(100vh - 30px);border:1px solid #353641;border-radius:11px;background:#191a21;color:#e8eaf0;padding:0;box-shadow:0 24px 80px #0009}
 .profile-dialog::backdrop{background:#07080bb8;backdrop-filter:blur(3px)}
 .profile-dialog form{padding:22px}
 .dialog-heading{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px}
@@ -128,6 +128,13 @@ h1{font:700 25px Manrope,sans-serif;letter-spacing:-.7px;margin:6px 0}
 .optional{font-size:8px;color:#777a86;letter-spacing:.5px;margin-left:5px}
 .profile-dialog input,.profile-dialog select,.profile-dialog textarea{display:block;width:100%;margin-top:7px;padding:10px;border:1px solid #353741;border-radius:6px;background:#121319;color:#e8eaf0;font-size:12px;outline:0;resize:vertical}
 .profile-dialog input:focus,.profile-dialog select:focus,.profile-dialog textarea:focus{border-color:#8065ed}
+.form-section{margin:24px 0 2px;padding-top:16px;border-top:1px solid #282a33;font-size:10px;font-weight:700;letter-spacing:1.15px;color:#7f8290}
+.form-section-row{display:flex;align-items:center;justify-content:space-between}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.profile-dialog label.check{display:flex;align-items:center;gap:9px;font-weight:550}
+.profile-dialog label.check input{display:inline-block;width:auto;margin:0}
+.overview-tags{display:flex;flex-wrap:wrap;gap:4px;margin:7px 0 0 36px}
+.tag{padding:2px 7px;border-radius:4px;background:#2a2640;color:#b9aaff;font-size:9px}
 .field-help{font-size:10px;color:#818490;line-height:1.5;margin-top:-8px}
 .dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:21px}
 .form-error{font-size:11px;color:#ff9999;padding:9px;border-radius:5px;background:#49282b;margin-top:13px}

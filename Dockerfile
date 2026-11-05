@@ -38,6 +38,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     novnc \
     && rm -rf /var/lib/apt/lists/*
 
+# Xray runs per profile for share links (vmess/vless/trojan/ss), proxy credentials and proxy chains.
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends unzip \
+    && case "${TARGETARCH:-$(dpkg --print-architecture)}" in \
+        arm64) XRAY_ASSET=Xray-linux-arm64-v8a.zip ;; \
+        amd64) XRAY_ASSET=Xray-linux-64.zip ;; \
+        *) echo "Xray has no build for this architecture" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL -o /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/latest/download/${XRAY_ASSET}" \
+    && unzip -o /tmp/xray.zip xray -d /tmp/xray \
+    && install -m 755 /tmp/xray/xray /usr/local/bin/xray \
+    && rm -rf /tmp/xray /tmp/xray.zip /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY package.json package-lock.json ./

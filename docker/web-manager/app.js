@@ -46,6 +46,35 @@ const translations = {
         'All profiles': '所有配置文件',
         'Profile': '配置文件',
         'Chrome version': 'Chrome 版本',
+        'Tags': '标签',
+        'e.g. US, shop': '例如：US, 店铺',
+        'NETWORK': '网络',
+        'LOCATION & LANGUAGE': '位置与语言',
+        'FINGERPRINT': '指纹',
+        'NOTES': '备注',
+        'Pre-proxy': '前置代理',
+        'Supports HTTP/SOCKS proxies, proxies with a username and password, and vmess://, vless://, trojan:// and ss:// links. Credentials are stored on the server and never shown again. Changes apply the next time the profile starts.': '支持 HTTP/SOCKS 代理、带用户名密码的代理，以及 vmess://、vless://、trojan://、ss:// 链接。凭据保存在服务器上，之后不会再显示。更改将在下次启动配置文件时生效。',
+        'Traffic reaches the proxy above through this one (a proxy chain).': '流量会先经过前置代理，再到达上面的代理（代理链）。',
+        'Block WebRTC IP leaks': '防止 WebRTC 泄漏 IP',
+        'Timezone & location': '时区与地理位置',
+        'Language': '语言',
+        'Default (do not change)': '默认（不修改）',
+        'Auto (match proxy IP)': '自动（匹配代理 IP）',
+        'Auto detects the proxy\'s exit IP when the profile starts, so the first start can take a few seconds longer.': '“自动”会在启动时检测代理出口 IP，因此启动可能多花几秒。',
+        'Randomize': '随机生成',
+        'CPU cores': 'CPU 核数',
+        'Memory (GB)': '内存 (GB)',
+        'User agent': 'User Agent',
+        'WebGL graphics card': 'WebGL 显卡',
+        'Only the options you choose are changed. Pick values that match each other (for example a Windows user agent with an NVIDIA or Intel card).': '只会修改你选择的项目。请选择相互匹配的值（例如 Windows 的 User Agent 搭配 NVIDIA 或 Intel 显卡）。',
+        'Show profile name watermark on pages': '在页面顶部显示环境名称水印',
+        'Environment': '环境',
+        'Default (nothing modified)': '默认（未修改任何项）',
+        'Timezone': '时区',
+        'Memory': '内存',
+        'WebRTC protected': 'WebRTC 已防泄漏',
+        'Watermark': '水印',
+        'A pre-proxy needs a profile proxy to chain to.': '前置代理需要配合配置文件的代理使用。',
         'Latest (Stable)': '最新（Stable）',
         'installed': '已安装',
         'Latest follows the Stable channel. A version that is not installed yet is downloaded the first time a profile starts with it.': '“最新”跟随 Stable 通道。尚未安装的版本会在配置文件首次启动时下载。',
@@ -226,7 +255,7 @@ function renderProfiles() {
         name.textContent = profile.name;
         const meta = document.createElement('div');
         meta.className = 'profile-meta';
-        meta.textContent = profile.proxy === 'direct://' ? translate('Direct connection') : profile.proxy;
+        meta.textContent = proxyLabel(profile);
         info.append(name, meta);
 
         const state = document.createElement('span');
@@ -282,6 +311,17 @@ function renderOverview() {
         name.textContent = profile.name;
         identity.append(avatar, name);
         profileCell.append(identity);
+        if (profile.tags?.length) {
+            const tags = document.createElement('div');
+            tags.className = 'overview-tags';
+            for (const label of profile.tags) {
+                const tag = document.createElement('span');
+                tag.className = 'tag';
+                tag.textContent = label;
+                tags.append(tag);
+            }
+            profileCell.append(tags);
+        }
 
         const versionCell = document.createElement('td');
         versionCell.className = 'overview-version';
@@ -300,7 +340,7 @@ function renderOverview() {
         }
 
         const proxyCell = document.createElement('td');
-        proxyCell.textContent = profile.proxy === 'direct://' ? translate('Direct connection') : profile.proxy;
+        proxyCell.textContent = proxyLabel(profile);
         proxyCell.title = proxyCell.textContent;
 
         const notesCell = document.createElement('td');
@@ -390,7 +430,9 @@ function renderWorkspace(profile) {
     document.querySelector('#detail-chrome').textContent = profile.chromeVersion === profile.chrome || !profile.chromeVersion
         ? (profile.chrome || 'latest')
         : `${profile.chrome} (${profile.chromeVersion})`;
-    document.querySelector('#detail-proxy').textContent = profile.proxy === 'direct://' ? translate('Direct connection') : profile.proxy;
+    document.querySelector('#detail-proxy').textContent = proxyLabel(profile);
+    document.querySelector('#detail-tags').textContent = (profile.tags || []).join(', ') || '—';
+    document.querySelector('#detail-environment').textContent = environmentSummary(profile);
     document.querySelector('#detail-notes').textContent = profile.notes || translate('No notes added.');
     document.querySelector('#detail-created').textContent = formatCreatedAt(profile.createdAt);
 
@@ -432,6 +474,65 @@ function selectProfile(profile) {
     renderProfiles();
 }
 
+function proxyLabel(profile) {
+    const main = profile.proxy === 'direct://' ? translate('Direct connection') : profile.proxy;
+    return profile.preProxy ? `${profile.preProxy} → ${main}` : main;
+}
+
+function environmentSummary(profile) {
+    const fingerprint = profile.fingerprint || {};
+    const parts = [];
+    const shown = (value) => (value === 'auto' ? translate('Auto (match proxy IP)') : value);
+    if (profile.timezone) parts.push(`${translate('Timezone')}: ${shown(profile.timezone)}`);
+    if (profile.language) parts.push(`${translate('Language')}: ${shown(profile.language)}`);
+    if (fingerprint.cpuCores) parts.push(`${translate('CPU cores')}: ${fingerprint.cpuCores}`);
+    if (fingerprint.memory) parts.push(`${translate('Memory')}: ${fingerprint.memory} GB`);
+    if (fingerprint.userAgent) parts.push(`${translate('User agent')}: ${fingerprint.userAgent}`);
+    if (fingerprint.webgl) parts.push(`WebGL: ${fingerprint.webgl}`);
+    if (profile.webrtcProtect) parts.push(translate('WebRTC protected'));
+    if (profile.watermark) parts.push(translate('Watermark'));
+    return parts.join(' · ') || translate('Default (nothing modified)');
+}
+
+let presetsPromise = null;
+
+async function fillLocationOptions(timezone, language) {
+    const fill = (select, items, selected) => {
+        select.replaceChildren(
+            new Option(translate('Default (do not change)'), ''),
+            new Option(translate('Auto (match proxy IP)'), 'auto')
+        );
+        for (const item of items) select.append(new Option(item.label, item.value));
+        if (selected && ![...select.options].some((option) => option.value === selected)) {
+            select.append(new Option(selected, selected));
+        }
+        select.value = selected;
+    };
+    const timezoneSelect = document.querySelector('#profile-timezone');
+    const languageSelect = document.querySelector('#profile-language');
+    fill(timezoneSelect, [], timezone);
+    fill(languageSelect, [], language);
+    try {
+        presetsPromise ||= api('/api/presets');
+        const presets = await presetsPromise;
+        fill(timezoneSelect, presets.cities.map((city) => ({ value: city.id, label: city.label })), timezoneSelect.value);
+        fill(languageSelect, presets.languages.map((item) => ({ value: item.code, label: `${item.label} (${item.code})` })), languageSelect.value);
+    } catch (error) {
+        presetsPromise = null;
+        showToast(error.message, true);
+    }
+}
+
+function randomizeFingerprint() {
+    const pick = (list) => list[Math.floor(Math.random() * list.length)];
+    const userAgent = pick(['windows', 'mac', 'linux']);
+    const cards = { windows: ['nvidia', 'intel', 'amd'], mac: ['apple'], linux: ['nvidia', 'intel', 'amd'] }[userAgent];
+    document.querySelector('#profile-cpu').value = pick(['4', '8', '12', '16']);
+    document.querySelector('#profile-memory').value = pick(['4', '8']);
+    document.querySelector('#profile-ua').value = userAgent;
+    document.querySelector('#profile-webgl').value = pick(cards);
+}
+
 async function fillChromeOptions(selected) {
     const select = document.querySelector('#profile-chrome');
     const ensureOption = (value) => {
@@ -465,7 +566,17 @@ function openDialog(profile = null) {
     document.querySelector('#dialog-save').textContent = translate(editingId ? 'Save changes' : 'Create profile');
     document.querySelector('#profile-name').value = profile?.name || '';
     fillChromeOptions(profile?.chrome || 'latest');
+    document.querySelector('#profile-tags').value = (profile?.tags || []).join(', ');
     document.querySelector('#profile-proxy').value = profile?.proxy || 'direct://';
+    document.querySelector('#profile-preproxy').value = profile?.preProxy || '';
+    document.querySelector('#profile-webrtc').checked = Boolean(profile?.webrtcProtect);
+    fillLocationOptions(profile?.timezone || '', profile?.language || '');
+    const fingerprint = profile?.fingerprint || {};
+    document.querySelector('#profile-cpu').value = String(fingerprint.cpuCores || 0);
+    document.querySelector('#profile-memory').value = String(fingerprint.memory || 0);
+    document.querySelector('#profile-ua').value = fingerprint.userAgent || '';
+    document.querySelector('#profile-webgl').value = fingerprint.webgl || '';
+    document.querySelector('#profile-watermark').checked = Boolean(profile?.watermark);
     document.querySelector('#profile-notes').value = profile?.notes || '';
     profileDialog.showModal();
     document.querySelector('#profile-name').focus();
@@ -580,6 +691,8 @@ document.querySelector('#language-toggle').addEventListener('click', () => {
 document.querySelector('#dialog-close').addEventListener('click', () => profileDialog.close());
 document.querySelector('#dialog-cancel').addEventListener('click', () => profileDialog.close());
 
+document.querySelector('#randomize-fingerprint').addEventListener('click', randomizeFingerprint);
+
 profileForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     formError.hidden = true;
@@ -587,6 +700,18 @@ profileForm.addEventListener('submit', async (event) => {
         name: document.querySelector('#profile-name').value,
         chrome: document.querySelector('#profile-chrome').value,
         proxy: document.querySelector('#profile-proxy').value,
+        preProxy: document.querySelector('#profile-preproxy').value,
+        tags: document.querySelector('#profile-tags').value,
+        webrtcProtect: document.querySelector('#profile-webrtc').checked,
+        watermark: document.querySelector('#profile-watermark').checked,
+        timezone: document.querySelector('#profile-timezone').value,
+        language: document.querySelector('#profile-language').value,
+        fingerprint: {
+            cpuCores: Number(document.querySelector('#profile-cpu').value),
+            memory: Number(document.querySelector('#profile-memory').value),
+            userAgent: document.querySelector('#profile-ua').value,
+            webgl: document.querySelector('#profile-webgl').value
+        },
         notes: document.querySelector('#profile-notes').value
     };
     try {
