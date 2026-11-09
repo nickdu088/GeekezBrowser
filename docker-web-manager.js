@@ -663,9 +663,12 @@ async function startProfile(id) {
         const city = presets.CITIES.find((item) => item.id === profile.timezone);
         if (profile.webrtcProtect) args.push('--webrtc-ip-handling-policy=disable_non_proxied_udp', '--force-webrtc-ip-handling-policy');
         if (/^[a-z]{2,3}-[A-Z]{2}$/.test(profile.language || '')) args.push(`--lang=${profile.language}`, `--accept-lang=${profile.language}`);
+        // Without this Chrome reports navigator.webdriver = true because it was started by automation.
+        args.push('--disable-blink-features=AutomationControlled');
         const browser = await puppeteer.launch({
             executablePath,
             headless: false,
+            ignoreDefaultArgs: ['--enable-automation'],
             userDataDir: path.join(PROFILE_ROOT, id),
             defaultViewport: null,
             env: city ? { ...session.desktop.env, TZ: city.timezone } : session.desktop.env,
