@@ -132,11 +132,13 @@ function withDefaults(profile) {
     return {
         preProxy: '',
         tags: [],
-        webrtcProtect: false,
         watermark: false,
         timezone: '',
         language: '',
         ...profile,
+        // Profiles saved before the three-way WebRTC setting only had an on/off switch.
+        webrtc: profile.webrtc ?? (profile.webrtcProtect ? 'protect' : ''),
+        webrtcProtect: undefined,
         fingerprint: normalizeFingerprint(profile.fingerprint)
     };
 }
@@ -168,7 +170,9 @@ function normalizeProfile(body, existing = {}) {
         preProxy,
         chrome: normalizeChrome(body.chrome ?? existing.chrome ?? 'latest'),
         tags: normalizeTags(body.tags ?? existing.tags ?? []),
-        webrtcProtect: Boolean(body.webrtcProtect ?? existing.webrtcProtect ?? false),
+        webrtc: choice(String(body.webrtc ?? existing.webrtc ?? (existing.webrtcProtect ? 'protect' : '')),
+            ['', 'protect', 'disable'], 'Unsupported WebRTC mode.'),
+        webrtcProtect: undefined,
         watermark: Boolean(body.watermark ?? existing.watermark ?? false),
         timezone: choice(String(body.timezone ?? existing.timezone ?? ''),
             ['', 'auto', ...presets.CITIES.map((city) => city.id)], 'Unsupported timezone.'),
@@ -661,7 +665,7 @@ async function startProfile(id) {
         const userAgentPreset = presets.USER_AGENTS[withDefaults(profile).fingerprint.userAgent];
         if (userAgentPreset) args.push(`--user-agent=${userAgentPreset.string(session.buildId.split('.')[0])}`);
         const city = presets.CITIES.find((item) => item.id === profile.timezone);
-        if (profile.webrtcProtect) args.push('--webrtc-ip-handling-policy=disable_non_proxied_udp', '--force-webrtc-ip-handling-policy');
+        if (withDefaults(profile).webrtc) args.push('--webrtc-ip-handling-policy=disable_non_proxied_udp', '--force-webrtc-ip-handling-policy');
         if (/^[a-z]{2,3}-[A-Z]{2}$/.test(profile.language || '')) args.push(`--lang=${profile.language}`, `--accept-lang=${profile.language}`);
         // Without this Chrome reports navigator.webdriver = true because it was started by automation.
         args.push('--disable-blink-features=AutomationControlled');

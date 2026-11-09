@@ -29,6 +29,18 @@ function pageScript(options) {
             // Leave the property untouched if the browser refuses.
         }
     };
+    if (options.disableWebRtc) {
+        // Remove every WebRTC interface (RTCPeerConnection, RTCDataChannel, ...) before the page can grab it.
+        for (const name of Object.getOwnPropertyNames(globalThis)) {
+            if (/^(webkitRTC|RTC)/.test(name)) {
+                try {
+                    delete globalThis[name];
+                } catch {
+                    // Leave it if the browser refuses.
+                }
+            }
+        }
+    }
     const navigatorPrototype = typeof Navigator !== 'undefined' ? Navigator.prototype : WorkerNavigator.prototype;
     if (options.platform) defineGetter(navigatorPrototype, 'platform', options.platform);
     if (options.cpuCores) defineGetter(navigatorPrototype, 'hardwareConcurrency', options.cpuCores);
@@ -136,89 +148,102 @@ async function buildEnvironment(profile, browser, page) {
         cpuCores: profile.fingerprint.cpuCores || 0,
         memory: profile.fingerprint.memory || 0,
         webgl: presets.WEBGL[profile.fingerprint.webgl] || null,
-        watermark: profile.watermark ? profile.name : ''
+        watermark: profile.watermark ? profile.name : '',
+        disableWebRtc: profile.webrtc === 'disable'
     };
-    const needsScript = Boolean(script.platform || script.cpuCores || script.memory || script.webgl || script.watermark);
+    const needsScript = Boolean(script.disableWebRtc || script.platform || script.cpuCores || script.memory || script.webgl || script.watermark);
     return { location, locale, override, script, needsScript };
 }
-
-// Emulation overrides only last while the DevTools session that set them stays attached,
-// so the session is kept for as long as the page lives.
-const emulationSessions = new WeakMap();
 
 async function sendQuietly(session, method, params) {
     try {
         await session.send(method, params);
     } catch {
-        // Not every kind of target supports every override.
+        // Not every kind of target supports every command.
     }
 }
 
-async function applyEmulation(session, environment) {
+// Sends every command at once (they are processed in order) instead of waiting for each reply.
+function applyEmulation(session, environment) {
+    const steps = [];
     if (environment.location) {
-        await sendQuietly(session, 'Emulation.setTimezoneOverride', { timezoneId: environment.location.timezone });
-        await sendQuietly(session, 'Emulation.setGeolocationOverride', {
+        steps.push(sendQuietly(session, 'Emulation.setTimezoneOverride', { timezoneId: environment.location.timezone }));
+        steps.push(sendQuietly(session, 'Emulation.setGeolocationOverride', {
             latitude: environment.location.latitude, longitude: environment.location.longitude, accuracy: 50
-        });
+        }));
     }
-    if (environment.locale) await sendQuietly(session, 'Emulation.setLocaleOverride', { locale: environment.locale });
-    if (environment.override) await sendQuietly(session, 'Emulation.setUserAgentOverride', environment.override);
+    if (environment.locale) steps.push(sendQuietly(session, 'Emulation.setLocaleOverride', { locale: environment.locale }));
+    if (environment.override) steps.push(sendQuietly(session, 'Emulation.setUserAgentOverride', environment.override));
+    return Promise.all(steps);
 }
 
-// Workers and cross-site frames are separate targets: they are paused when created so the settings
-// are in place before their scripts run, then always resumed.
+function scriptSource(environment) {
+    return `(${pageScript.toString()})(${JSON.stringify(environment.script)})`;
+}
+
+async function setUpTarget(session, type, environment) {
+    // Popups only leave a moment before their first document runs, so everything is sent in one batch with
+    // the script first. In this order the script also reaches tabs the browser opens itself.
+    const steps = [];
+    if (type === 'page' || type === 'iframe') {
+        if (environment.needsScript) {
+            steps.push(sendQuietly(session, 'Page.addScriptToEvaluateOnNewDocument', { source: scriptSource(environment) }));
+        }
+        steps.push(sendQuietly(session, 'Page.enable'));
+        steps.push(applyEmulation(session, environment));
+        steps.push(watchChildTargets(session, environment));
+    } else if (type === 'worker' || type === 'shared_worker' || type === 'service_worker') {
+        if (environment.needsScript) steps.push(sendQuietly(session, 'Runtime.evaluate', { expression: scriptSource(environment) }));
+        steps.push(applyEmulation(session, environment));
+        steps.push(watchChildTargets(session, environment));
+    } else if (type === 'tab') {
+        steps.push(watchChildTargets(session, environment));
+    }
+    await Promise.all(steps);
+}
+
+// Every new target (tab, popup, cross-site frame, worker) is paused when it is created, gets the profile's
+// settings, and is then always resumed, so even its very first script already sees them.
+async function attachChild(parent, { sessionId, targetInfo }, environment) {
+    const child = parent.connection()?.session(sessionId);
+    if (!child) return;
+    try {
+        await setUpTarget(child, targetInfo.type, environment);
+    } catch (error) {
+        console.warn(`Could not apply the profile environment to a ${targetInfo.type}:`, error.message);
+    } finally {
+        await sendQuietly(child, 'Runtime.runIfWaitingForDebugger');
+    }
+}
+
 async function watchChildTargets(session, environment) {
-    await session.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true });
-    session.on('Target.attachedToTarget', async ({ sessionId, targetInfo }) => {
-        const child = session.connection()?.session(sessionId);
-        if (!child) return;
-        try {
-            if (targetInfo.type === 'worker' || targetInfo.type === 'shared_worker') {
-                await applyEmulation(child, environment);
-                if (environment.needsScript) {
-                    await sendQuietly(child, 'Runtime.evaluate', {
-                        expression: `(${pageScript.toString()})(${JSON.stringify(environment.script)})`
-                    });
-                }
-                await watchChildTargets(child, environment).catch(() => {});
-            } else if (targetInfo.type === 'iframe') {
-                await applyEmulation(child, environment);
-                await watchChildTargets(child, environment).catch(() => {});
-            }
-        } catch (error) {
-            console.warn('Could not apply the profile environment to a frame or worker:', error.message);
-        } finally {
-            await sendQuietly(child, 'Runtime.runIfWaitingForDebugger');
-        }
-    });
+    session.on('Target.attachedToTarget', (event) => attachChild(session, event, environment));
+    await sendQuietly(session, 'Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true });
 }
 
-async function applyEnvironment(page, environment) {
-    const client = await openClient(page);
-    emulationSessions.set(page, client);
-    await applyEmulation(client, environment);
-    await watchChildTargets(client, environment);
-    if (environment.needsScript) await page.evaluateOnNewDocument(pageScript, environment.script);
-}
+// Emulation overrides only last while the DevTools session that set them stays attached, so the root
+// session (and with it every child session) is kept until the browser closes.
+const rootSessions = new Set();
 
-// Applies the environment to the pages that exist now and to every page opened later.
 async function installEnvironment(browser, environment) {
-    const applied = new WeakSet();
-    const apply = async (page) => {
-        if (applied.has(page)) return;
-        applied.add(page);
-        try {
-            await applyEnvironment(page, environment);
-        } catch (error) {
-            console.warn('Could not apply the profile environment to a page:', error.message);
-        }
-    };
-    browser.on('targetcreated', async (target) => {
-        if (target.type() !== 'page') return;
-        const page = await target.page().catch(() => null);
-        if (page) await apply(page);
+    const root = await browser.target().createCDPSession();
+    rootSessions.add(root);
+    browser.once('disconnected', () => rootSessions.delete(root));
+
+    // Pages that already exist are not paused, so wait until they have their settings before returning.
+    const expected = browser.targets().filter((target) => target.type() === 'page').length;
+    let attached = 0;
+    const pending = new Set();
+    root.on('Target.attachedToTarget', (event) => {
+        if (event.targetInfo.type === 'page') attached += 1;
+        const work = attachChild(root, event, environment);
+        pending.add(work);
+        work.finally(() => pending.delete(work));
     });
-    for (const page of await browser.pages()) await apply(page);
+    await sendQuietly(root, 'Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true });
+    const deadline = Date.now() + 1500;
+    while (attached < expected && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+    await Promise.all([...pending]);
 }
 
 module.exports = { buildEnvironment, installEnvironment };

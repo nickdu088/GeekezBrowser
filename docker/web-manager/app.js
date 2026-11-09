@@ -55,7 +55,11 @@ const translations = {
         'Pre-proxy': '前置代理',
         'Supports HTTP/SOCKS proxies, proxies with a username and password, and vmess://, vless://, trojan:// and ss:// links. Credentials are stored on the server and never shown again. Changes apply the next time the profile starts.': '支持 HTTP/SOCKS 代理、带用户名密码的代理，以及 vmess://、vless://、trojan://、ss:// 链接。凭据保存在服务器上，之后不会再显示。更改将在下次启动配置文件时生效。',
         'Traffic reaches the proxy above through this one (a proxy chain).': '流量会先经过前置代理，再到达上面的代理（代理链）。',
-        'Block WebRTC IP leaks': '防止 WebRTC 泄漏 IP',
+        'WebRTC': 'WebRTC',
+        'Block IP leaks (WebRTC still works)': '防止泄漏 IP（WebRTC 仍可用）',
+        'Disable WebRTC completely': '完全禁用 WebRTC',
+        'WebRTC disabled': 'WebRTC 已禁用',
+        'Unsupported WebRTC mode.': '不支持的 WebRTC 模式。',
         'Timezone & location': '时区与地理位置',
         'Language': '语言',
         'Default (do not change)': '默认（不修改）',
@@ -489,7 +493,8 @@ function environmentSummary(profile) {
     if (fingerprint.memory) parts.push(`${translate('Memory')}: ${fingerprint.memory} GB`);
     if (fingerprint.userAgent) parts.push(`${translate('User agent')}: ${fingerprint.userAgent}`);
     if (fingerprint.webgl) parts.push(`WebGL: ${fingerprint.webgl}`);
-    if (profile.webrtcProtect) parts.push(translate('WebRTC protected'));
+    if (profile.webrtc === 'protect') parts.push(translate('WebRTC protected'));
+    if (profile.webrtc === 'disable') parts.push(translate('WebRTC disabled'));
     if (profile.watermark) parts.push(translate('Watermark'));
     return parts.join(' · ') || translate('Default (nothing modified)');
 }
@@ -569,7 +574,7 @@ function openDialog(profile = null) {
     document.querySelector('#profile-tags').value = (profile?.tags || []).join(', ');
     document.querySelector('#profile-proxy').value = profile?.proxy || 'direct://';
     document.querySelector('#profile-preproxy').value = profile?.preProxy || '';
-    document.querySelector('#profile-webrtc').checked = Boolean(profile?.webrtcProtect);
+    document.querySelector('#profile-webrtc').value = profile?.webrtc || '';
     fillLocationOptions(profile?.timezone || '', profile?.language || '');
     const fingerprint = profile?.fingerprint || {};
     document.querySelector('#profile-cpu').value = String(fingerprint.cpuCores || 0);
@@ -702,7 +707,7 @@ profileForm.addEventListener('submit', async (event) => {
         proxy: document.querySelector('#profile-proxy').value,
         preProxy: document.querySelector('#profile-preproxy').value,
         tags: document.querySelector('#profile-tags').value,
-        webrtcProtect: document.querySelector('#profile-webrtc').checked,
+        webrtc: document.querySelector('#profile-webrtc').value,
         watermark: document.querySelector('#profile-watermark').checked,
         timezone: document.querySelector('#profile-timezone').value,
         language: document.querySelector('#profile-language').value,
